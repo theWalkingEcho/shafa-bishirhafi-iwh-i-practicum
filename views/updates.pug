@@ -16,51 +16,148 @@ html
                 span HubSpot demo workspace
         main.page.page--form
             a.back-link(href="/") Return to the homepage
+            if error
+                .alert.alert--error(role="alert")
+                    strong Could not save the record
+                    p= error
             section.form-panel
-                p.eyebrow UPDATE HUBSPOT
-                h1 Update a custom object record
-                p.hero__copy Select a property, enter the HubSpot record ID, and provide its new value.
-                if error
-                    .alert.alert--error(role="alert")
-                        strong Could not update the record
-                        p= error
-                if updated
-                    .alert.alert--success(role="status")
-                        strong= `${updated} record updated.`
+                p.eyebrow CUSTOM OBJECT RECORDS
+                h1 Add to or update this table
+                p.hero__copy Choose whether to create a new record or update an existing one.
                 form.record-form(method="post" action="/update-cobj")
-                    .form-grid
-                        label.form-field(for="property")
-                            span Custom object property
-                            select(name="property" id="property" required)
-                                option(value="" disabled selected=!values.property) Select a property
-                                each config, key in objectConfigs
-                                    optgroup(label=config.plural)
-                                        each property in config.properties
-                                            option(
-                                                value=`${key}:${property.name}`
-                                                selected=values.property === `${key}:${property.name}`
-                                            )= property.label
-                        label.form-field(for="recordId")
-                            span HubSpot record ID
-                            input(
-                                type="text"
-                                name="recordId"
-                                id="recordId"
-                                required
-                                pattern="[0-9]+"
-                                value=values.recordId || ""
-                                placeholder="Enter the record ID"
-                            )
-                        label.form-field(for="value")
-                            span New value
-                            input(
-                                type="text"
-                                name="value"
-                                id="value"
-                                required
-                                value=values.value || ""
-                                placeholder="Enter the new value"
-                            )
-                    .form-actions
-                        a.button.button--secondary(href="/") Cancel
-                        button.button.button--primary(type="submit") Update record
+                    .record-mode-options(role="radiogroup" aria-label="Record action")
+                        label.record-mode-option
+                            input(type="radio" name="operation" value="create" checked=values.operation === 'create')
+                            span New record
+                        label.record-mode-option
+                            input(type="radio" name="operation" value="update" checked=values.operation === 'update')
+                            span Existing record
+                    fieldset#newRecordFields(disabled=values.operation !== 'create' hidden=values.operation !== 'create')
+                        legend Create a new record
+                        .form-grid
+                            label.form-field(for="createObjectKey")
+                                span Custom object
+                                select(name="objectKey" id="createObjectKey" required)
+                                    each config, key in objectConfigs
+                                        option(value=key selected=values.create.objectKey === key)= config.singular
+                        each config, key in objectConfigs
+                            div(data-create-object-key=key hidden=values.create.objectKey !== key)
+                                .form-grid
+                                    each property in config.properties
+                                        label.form-field(for=`create-${key}-${property.name}`)
+                                            span
+                                                | #{property.label}
+                                                if config.requiredProperties.includes(property.name)
+                                                    b.required-mark  *
+                                            input(
+                                                type="text"
+                                                name=property.name
+                                                id=`create-${key}-${property.name}`
+                                                required=config.requiredProperties.includes(property.name)
+                                                disabled=values.create.objectKey !== key
+                                                value=values.create.properties[property.name] || ""
+                                                placeholder=`Enter ${property.label.toLowerCase()}`
+                                            )
+                        .form-actions
+                            button.button.button--primary(type="submit") Create record
+                    fieldset#existingRecordFields(disabled=values.operation !== 'update' hidden=values.operation !== 'update')
+                        legend Update an existing record
+                        p.hero__copy Select the object and record. The record ID is filled automatically.
+                        .form-grid
+                            label.form-field(for="updateObjectKey")
+                                span Custom object
+                                select(name="updateObjectKey" id="updateObjectKey" required)
+                                    each config, key in objectConfigs
+                                        option(value=key selected=values.update.objectKey === key)= config.singular
+                            label.form-field(for="recordSelection")
+                                span Existing record
+                                select(name="recordSelection" id="recordSelection" required)
+                                    option(value="" disabled selected=!values.update.recordSelection) Select a record
+                                    each config, key in objectConfigs
+                                        - const item = objects[key]
+                                        optgroup(label=config.plural data-record-object=key disabled=values.update.objectKey !== key)
+                                            if item && item.records.length
+                                                each record in item.records
+                                                    option(
+                                                        value=`${key}:${record.id}`
+                                                        selected=values.update.recordSelection === `${key}:${record.id}`
+                                                    )= `${record.properties.name || config.singular} — ${record.properties.vin || record.properties.sku || record.properties.warranty_number || record.id}`
+                                            else
+                                                option(value="" disabled) No records available
+                            label.form-field(for="property")
+                                span Property to update
+                                select(name="property" id="property" required)
+                                    option(value="" disabled selected=!values.update.property) Select a property
+                                    each config, key in objectConfigs
+                                        optgroup(label=config.plural data-property-object=key disabled=values.update.objectKey !== key)
+                                            each property in config.properties
+                                                option(
+                                                    value=`${key}:${property.name}`
+                                                    selected=values.update.property === `${key}:${property.name}`
+                                                )= property.label
+                            label.form-field(for="value")
+                                span New value
+                                input(
+                                    type="text"
+                                    name="value"
+                                    id="value"
+                                    required
+                                    value=values.update.value || ""
+                                    placeholder="Enter the new value"
+                                )
+                        .form-actions
+                            button.button.button--primary(type="submit") Update selected record
+        script.
+            const operationInputs = document.querySelectorAll('input[name="operation"]');
+            const newRecordFields = document.getElementById('newRecordFields');
+            const existingRecordFields = document.getElementById('existingRecordFields');
+            const createObjectSelect = document.getElementById('createObjectKey');
+            const createObjectGroups = document.querySelectorAll('[data-create-object-key]');
+            const updateObjectSelect = document.getElementById('updateObjectKey');
+            const recordSelect = document.getElementById('recordSelection');
+            const propertySelect = document.getElementById('property');
+            const recordGroups = document.querySelectorAll('[data-record-object]');
+            const propertyGroups = document.querySelectorAll('[data-property-object]');
+
+            function syncCreateObjectFields() {
+                createObjectGroups.forEach((group) => {
+                    const active = group.dataset.createObjectKey === createObjectSelect.value;
+                    group.hidden = !active;
+                    group.querySelectorAll('input').forEach((input) => {
+                        input.disabled = !active;
+                    });
+                });
+            }
+
+            function syncUpdateProperties() {
+                const objectKey = updateObjectSelect.value;
+                recordGroups.forEach((group) => {
+                    group.disabled = group.dataset.recordObject !== objectKey;
+                });
+                propertyGroups.forEach((group) => {
+                    group.disabled = group.dataset.propertyObject !== objectKey;
+                });
+                if (!recordSelect.value || !recordSelect.value.startsWith(`${objectKey}:`)) {
+                    recordSelect.value = '';
+                }
+                if (!propertySelect.value || !propertySelect.value.startsWith(`${objectKey}:`)) {
+                    propertySelect.value = '';
+                }
+            }
+
+            function syncMode() {
+                const operation = document.querySelector('input[name="operation"]:checked').value;
+                const creating = operation === 'create';
+                newRecordFields.hidden = !creating;
+                newRecordFields.disabled = !creating;
+                existingRecordFields.hidden = creating;
+                existingRecordFields.disabled = creating;
+                syncCreateObjectFields();
+                syncUpdateProperties();
+            }
+
+            operationInputs.forEach((input) => input.addEventListener('change', syncMode));
+            createObjectSelect.addEventListener('change', syncCreateObjectFields);
+            updateObjectSelect.addEventListener('change', syncUpdateProperties);
+            recordSelect.addEventListener('change', syncUpdateProperties);
+            syncMode();

@@ -267,7 +267,7 @@ async function getAssociations() {
     };
 }
 
-async function dashboardData() {
+async function getCustomObjectData() {
     const schemas = await getSchemas();
     const objects = {};
     for (const [key, config] of Object.entries(OBJECTS)) {
@@ -278,7 +278,13 @@ async function dashboardData() {
             records: schema ? await getObjectRecords(schema.objectTypeId, config.properties.map((property) => property.name)) : []
         };
     }
-    const [contactsResult, companiesResult] = await Promise.all([
+
+    return objects;
+}
+
+async function dashboardData() {
+    const [objects, contactsResult, companiesResult] = await Promise.all([
+        getCustomObjectData(),
         getStandardObjectRecords('contacts', 'firstname,lastname,email'),
         getStandardObjectRecords('companies', 'name')
     ]);
@@ -301,7 +307,8 @@ app.get('/', async (req, res) => {
             title: 'VMob Auto | HubSpot CRM',
             ...data,
             setupComplete: req.query.setup === 'complete',
-            created: req.query.created || ''
+            created: req.query.created || '',
+            updated: req.query.updated || ''
         });
     } catch (error) {
         res.status(getErrorStatus(error)).render('index', {
@@ -312,7 +319,8 @@ app.get('/', async (req, res) => {
             standardObjectErrors: { contacts: '', companies: '' },
             error: getErrorMessage(error),
             setupComplete: false,
-            created: ''
+            created: '',
+            updated: ''
         });
     }
 });
@@ -341,75 +349,117 @@ app.post('/setup', async (req, res) => {
             companies: [],
             error: getErrorMessage(error),
             setupComplete: false,
-            created: ''
+            created: '',
+            updated: ''
         });
     }
 });
 
-app.get('/update-cobj', (req, res) => {
-    res.render('updates', {
-        title: 'Update Custom Object Form | Integrating With HubSpot I Practicum',
-        objectConfigs: OBJECTS,
-        error: '',
-        updated: req.query.updated || '',
-        values: {}
-    });
-});
-
-app.post('/update-cobj', async (req, res) => {
+app.get('/update-cobj', async (req, res) => {
     const title = 'Update Custom Object Form | Integrating With HubSpot I Practicum';
-    const selection = typeof req.body.property === 'string' ? req.body.property.split(':') : [];
-    const [objectKey, propertyName, ...extra] = selection;
-    const config = OBJECTS[objectKey];
-    const recordId = String(req.body.recordId || '').trim();
-    const value = String(req.body.value || '').trim();
-
-    if (!config || !Array.isArray(config.properties) || extra.length > 0 ||
-        !config.properties.some((property) => property.name === propertyName)) {
-        return res.status(400).render('updates', {
-            title,
-            objectConfigs: OBJECTS,
-            error: 'Choose a valid custom object property.',
-            updated: '',
-            values: { property: req.body.property, recordId, value }
-        });
-    }
-
-    if (!/^\d+$/.test(recordId) || !value) {
-        return res.status(400).render('updates', {
-            title,
-            objectConfigs: OBJECTS,
-            error: 'Enter a valid HubSpot record ID and a new property value.',
-            updated: '',
-            values: { property: req.body.property, recordId, value }
-        });
-    }
-
     try {
         requireAccessToken();
-        const schema = (await getSchemas()).find((item) => item.name === config.name);
-        if (!schema) {
-            return res.status(409).render('updates', {
-                title,
-                objectConfigs: OBJECTS,
-                error: `Set up the ${config.plural.toLowerCase()} custom object before updating records.`,
-                updated: '',
-                values: { property: req.body.property, recordId, value }
-            });
-        }
-
-        await api.patch(`/crm/v3/objects/${schema.objectTypeId}/${recordId}`, {
-            properties: { [propertyName]: value }
+        const objects = await getCustomObjectData();
+        return res.render('updates', {
+            title,
+            objectConfigs: OBJECTS,
+            objects,
+            error: '',
+            values: { operation: 'create', create: { objectKey: 'vehicles', properties: {} }, update: { objectKey: 'vehicles' } }
         });
-        return res.redirect(`/update-cobj?updated=${encodeURIComponent(config.singular)}`);
     } catch (error) {
         return res.status(getErrorStatus(error)).render('updates', {
             title,
             objectConfigs: OBJECTS,
+            objects: {},
             error: getErrorMessage(error),
-            updated: '',
-            values: { property: req.body.property, recordId, value }
+            values: { operation: 'create', create: { objectKey: 'vehicles', properties: {} }, update: { objectKey: 'vehicles' } }
         });
+    }
+});
+
+app.post('/update-cobj', async (req, res) => {
+    const title = 'Update Custom Object Form | Integrating With HubSpot I Practicum';
+    let objects = {};
+    let values = { operation: 'create', create: { objectKey: 'vehicles', properties: {} }, update: { objectKey: 'vehicles' } };
+    const renderForm = (status, error) => res.status(status).render('updates', {
+        title,
+        objectConfigs: OBJECTS,
+        objects,
+        error,
+        values
+    });
+
+    try {
+        requireAccessToken();
+        objects = await getCustomObjectData();
+
+        if (req.body.operation === 'create') {
+            values.operation = 'create';
+            const objectKey = typeof req.body.objectKey === 'string' ? req.body.objectKey : '';
+            const config = OBJECTS[objectKey];
+            if (!config || !Array.isArray(config.properties)) {
+                return renderForm(400, 'Choose a valid custom object.');
+            }
+
+            const properties = Object.fromEntries(
+                config.properties.map((property) => [
+                    property.name,
+                    String(req.body[property.name] || '').trim()
+                ])
+            );
+            values.create = { objectKey, properties };
+            const missingProperties = config.requiredProperties.filter((property) => !properties[property]);
+            if (missingProperties.length > 0) {
+                return renderForm(400, `Provide all required fields: ${missingProperties.join(', ')}.`);
+            }
+
+            const schema = objects[objectKey].schema;
+            if (!schema) {
+                return renderForm(409, `Set up the ${config.plural.toLowerCase()} custom object before creating records.`);
+            }
+
+            const submittedProperties = Object.fromEntries(
+                Object.entries(properties).filter(([, value]) => value !== '')
+            );
+            await api.post(`/crm/v3/objects/${schema.objectTypeId}`, { properties: submittedProperties });
+            return res.redirect(`/?created=${encodeURIComponent(config.singular)}`);
+        }
+
+        if (req.body.operation === 'update') {
+            const recordSelection = typeof req.body.recordSelection === 'string' ? req.body.recordSelection : '';
+            const [objectKey, recordId, ...recordExtra] = recordSelection.split(':');
+            const updateObjectKey = typeof req.body.updateObjectKey === 'string' ? req.body.updateObjectKey : '';
+            const propertySelection = typeof req.body.property === 'string' ? req.body.property.split(':') : [];
+            const [propertyObjectKey, propertyName, ...propertyExtra] = propertySelection;
+            const value = String(req.body.value || '').trim();
+            values.operation = 'update';
+            values.update = { objectKey: updateObjectKey, recordSelection, property: req.body.property, value };
+
+            const config = OBJECTS[objectKey];
+            if (!config || updateObjectKey !== objectKey || !Array.isArray(config.properties) || recordExtra.length > 0 ||
+                !/^\d+$/.test(recordId || '') || propertyObjectKey !== objectKey || propertyExtra.length > 0 ||
+                !config.properties.some((property) => property.name === propertyName) || !value) {
+                return renderForm(400, 'Choose a valid record and property, then enter a new value.');
+            }
+
+            const object = objects[objectKey];
+            if (!object.schema) {
+                return renderForm(409, `Set up the ${config.plural.toLowerCase()} custom object before updating records.`);
+            }
+            if (!object.records.some((record) => record.id === recordId)) {
+                return renderForm(404, 'The selected record could not be found. Refresh the page and choose it again.');
+            }
+
+            await api.patch(`/crm/v3/objects/${object.schema.objectTypeId}/${recordId}`, {
+                properties: { [propertyName]: value }
+            });
+            return res.redirect(`/?updated=${encodeURIComponent(config.singular)}`);
+        }
+
+        return renderForm(400, 'Choose whether to create a new record or update an existing one.');
+    } catch (error) {
+        return renderForm(getErrorStatus(error), getErrorMessage(error));
     }
 });
 

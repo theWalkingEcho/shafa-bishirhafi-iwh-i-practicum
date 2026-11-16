@@ -464,6 +464,45 @@ tbody tr:last-child td {
     padding: 30px;
 }
 
+.record-form fieldset {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.record-form fieldset[hidden] {
+    display: none;
+}
+
+.record-form legend {
+    margin-bottom: 17px;
+    font-family: 'Manrope', sans-serif;
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.record-mode-options {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 24px;
+}
+
+.record-mode-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.record-mode-option input {
+    width: auto;
+    margin: 0;
+    accent-color: var(--teal);
+}
+
 .form-panel h1 {
     font-size: 29px;
 }
