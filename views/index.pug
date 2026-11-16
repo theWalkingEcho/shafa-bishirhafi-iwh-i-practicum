@@ -19,7 +19,8 @@ html
             section.hero
                 div
                     p.eyebrow DEALERSHIP OPERATIONS
-                    h1 Your automotive CRM, at a glance
+                    h1 Custom Object Table
+                    a(href="/update-cobj") Add to this table
                     p.hero__copy Manage vehicles, parts inventory, and customer warranties in one connected HubSpot workspace.
                 form(method="post" action="/setup")
                     button.button.button--primary(type="submit") Set up demo workspace
@@ -40,6 +41,9 @@ html
                 .alert.alert--success(role="status")
                     strong= `${created} record created.`
                     |  It has been associated with the selected contact.
+            if updated
+                .alert.alert--success(role="status")
+                    strong= `${updated} record updated.`
 
             section.metrics(aria-label="CRM summary")
                 each label, key in { vehicles: 'Vehicles', inventory: 'Inventory items', warranties: 'Warranties' }
@@ -69,12 +73,12 @@ html
                                     table
                                         thead
                                             tr
-                                                each property in item.config.properties.slice(0, 4)
+                                                each property in item.config.properties
                                                     th= property.label
                                         tbody
                                             each record in item.records
                                                 tr
-                                                    each property in item.config.properties.slice(0, 4)
+                                                    each property in item.config.properties
                                                         td= record.properties[property.name] || '—'
                             else
                                 .empty-state
