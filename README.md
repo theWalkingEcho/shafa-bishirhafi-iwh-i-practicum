@@ -15,6 +15,7 @@ This Node.js app creates three HubSpot custom objects: **Vehicles**, **Inventory
 2. Copy `.env.template` to `.env` and set `PRIVATE_ACCESS_KEY` to your private app token. Keep `.env` local; never commit or share the token.
 3. Install packages with `npm install`, then start the app with `node index.js`.
 4. Open [http://localhost:3000](http://localhost:3000) and select **Set up demo workspace**. The app creates or reuses the schemas, then adds three fictional records to each custom object and links them to demo contacts and a demo company.
+5. Select **Add record** on a custom object card to create a record through the `/create-cobj` POST endpoint. Use **Update record** in the navigation to change an existing record by its HubSpot record ID.
 
 The setup action is safe to repeat: it looks up the demo records using their unique email, VIN, SKU, warranty number, or company name before creating them.
 

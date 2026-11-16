@@ -24,7 +24,17 @@ html
                     .alert.alert--error(role="alert")
                         strong Could not save the record
                         p= error
-                form.record-form(method="post" action=`/records/${objectKey}`)
+                if associationErrors && associationErrors.contacts
+                    .alert.alert--error(role="alert")
+                        strong Contacts could not be loaded
+                        p= associationErrors.contacts
+                if associationErrors && associationErrors.companies
+                    .alert.alert--error(role="alert")
+                        strong Companies could not be loaded
+                        p Company association will be unavailable for this record.
+                        p= associationErrors.companies
+                form.record-form(method="post" action="/create-cobj")
+                    input(type="hidden" name="objectKey" value=objectKey)
                     .form-grid
                         each property in config.properties
                             label.form-field(for=property.name)

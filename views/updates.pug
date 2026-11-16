@@ -1,0 +1,66 @@
+doctype html
+html
+    head
+        title= title
+        meta(name="viewport" content="width=device-width, initial-scale=1")
+        link(rel="stylesheet" href="/css/style.css")
+    body
+        header.topbar
+            a.brand(href="/")
+                span.brand-mark N
+                span
+                    strong VMob
+                    small AUTO GROUP
+            nav.topbar__nav
+                a(href="/") CRM Overview
+                span HubSpot demo workspace
+        main.page.page--form
+            a.back-link(href="/") Return to the homepage
+            section.form-panel
+                p.eyebrow UPDATE HUBSPOT
+                h1 Update a custom object record
+                p.hero__copy Select a property, enter the HubSpot record ID, and provide its new value.
+                if error
+                    .alert.alert--error(role="alert")
+                        strong Could not update the record
+                        p= error
+                if updated
+                    .alert.alert--success(role="status")
+                        strong= `${updated} record updated.`
+                form.record-form(method="post" action="/update-cobj")
+                    .form-grid
+                        label.form-field(for="property")
+                            span Custom object property
+                            select(name="property" id="property" required)
+                                option(value="" disabled selected=!values.property) Select a property
+                                each config, key in objectConfigs
+                                    optgroup(label=config.plural)
+                                        each property in config.properties
+                                            option(
+                                                value=`${key}:${property.name}`
+                                                selected=values.property === `${key}:${property.name}`
+                                            )= property.label
+                        label.form-field(for="recordId")
+                            span HubSpot record ID
+                            input(
+                                type="text"
+                                name="recordId"
+                                id="recordId"
+                                required
+                                pattern="[0-9]+"
+                                value=values.recordId || ""
+                                placeholder="Enter the record ID"
+                            )
+                        label.form-field(for="value")
+                            span New value
+                            input(
+                                type="text"
+                                name="value"
+                                id="value"
+                                required
+                                value=values.value || ""
+                                placeholder="Enter the new value"
+                            )
+                    .form-actions
+                        a.button.button--secondary(href="/") Cancel
+                        button.button.button--primary(type="submit") Update record
