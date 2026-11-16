@@ -232,10 +232,21 @@ async function getObjectRecords(objectTypeId, propertyNames) {
     return response.data.results || [];
 }
 
+async function getStandardObjectRecords(objectType, properties) {
+    try {
+        const response = await api.get(`/crm/v3/objects/${objectType}`, {
+            params: { limit: 100, properties }
+        });
+        return { records: response.data.results || [], error: '' };
+    } catch (error) {
+        return { records: [], error: getErrorMessage(error) };
+    }
+}
+
 async function getAssociations() {
-    const [contactsResponse, companiesResponse, schemas] = await Promise.all([
-        api.get('/crm/v3/objects/contacts', { params: { limit: 100, properties: 'firstname,lastname,email' } }),
-        api.get('/crm/v3/objects/companies', { params: { limit: 100, properties: 'name' } }),
+    const [contactsResult, companiesResult, schemas] = await Promise.all([
+        getStandardObjectRecords('contacts', 'firstname,lastname,email'),
+        getStandardObjectRecords('companies', 'name'),
         getSchemas()
     ]);
 
@@ -246,9 +257,13 @@ async function getAssociations() {
     }
 
     return {
-        contacts: contactsResponse.data.results || [],
-        companies: companiesResponse.data.results || [],
-        vehicles
+        contacts: contactsResult.records,
+        companies: companiesResult.records,
+        vehicles,
+        associationErrors: {
+            contacts: contactsResult.error,
+            companies: companiesResult.error
+        }
     };
 }
 
@@ -263,14 +278,18 @@ async function dashboardData() {
             records: schema ? await getObjectRecords(schema.objectTypeId, config.properties.map((property) => property.name)) : []
         };
     }
-    const [contactsResponse, companiesResponse] = await Promise.all([
-        api.get('/crm/v3/objects/contacts', { params: { limit: 100, properties: 'firstname,lastname,email' } }),
-        api.get('/crm/v3/objects/companies', { params: { limit: 100, properties: 'name' } })
+    const [contactsResult, companiesResult] = await Promise.all([
+        getStandardObjectRecords('contacts', 'firstname,lastname,email'),
+        getStandardObjectRecords('companies', 'name')
     ]);
     return {
         objects,
-        contacts: contactsResponse.data.results || [],
-        companies: companiesResponse.data.results || []
+        contacts: contactsResult.records,
+        companies: companiesResult.records,
+        standardObjectErrors: {
+            contacts: contactsResult.error,
+            companies: companiesResult.error
+        }
     };
 }
 
@@ -290,6 +309,7 @@ app.get('/', async (req, res) => {
             objects: {},
             contacts: [],
             companies: [],
+            standardObjectErrors: { contacts: '', companies: '' },
             error: getErrorMessage(error),
             setupComplete: false,
             created: ''
@@ -420,9 +440,9 @@ app.get('/records/:objectKey/new', async (req, res) => {
     }
 });
 
-app.post('/records/:objectKey', async (req, res) => {
-    const config = OBJECTS[req.params.objectKey];
-    if (!config) return res.status(404).send('Unknown custom object.');
+async function createCustomObjectRecord(req, res, objectKey) {
+    const config = OBJECTS[objectKey];
+    if (!config || !Array.isArray(config.properties)) return res.status(404).send('Unknown custom object.');
 
     const properties = Object.fromEntries(
         config.properties.map((property) => [property.name, String(req.body[property.name] || '').trim()])
@@ -446,7 +466,7 @@ app.post('/records/:objectKey', async (req, res) => {
         const response = await api.post(`/crm/v3/objects/${schema.objectTypeId}`, { properties });
         await associate(schema.objectTypeId, response.data.id, 'contact', contact.id);
         if (company) await associate(schema.objectTypeId, response.data.id, 'company', company.id);
-        if (vehicle && req.params.objectKey !== 'vehicles') {
+        if (vehicle && objectKey !== 'vehicles') {
             const vehiclesSchema = (await getSchemas()).find((item) => item.name === 'vehicles');
             await associate(schema.objectTypeId, response.data.id, vehiclesSchema.objectTypeId, vehicle.id);
         }
@@ -456,7 +476,7 @@ app.post('/records/:objectKey', async (req, res) => {
             const options = await getAssociations();
             return res.status(getErrorStatus(error)).render('record-form', {
                 title: `Add ${config.singular} | VMob Auto`,
-                objectKey: req.params.objectKey,
+                objectKey,
                 config,
                 ...options,
                 error: getErrorMessage(error),
@@ -466,7 +486,14 @@ app.post('/records/:objectKey', async (req, res) => {
             return res.status(getErrorStatus(renderError)).send(getErrorMessage(renderError));
         }
     }
+}
+
+app.post('/create-cobj', async (req, res) => {
+    const objectKey = typeof req.body.objectKey === 'string' ? req.body.objectKey : '';
+    return createCustomObjectRecord(req, res, objectKey);
 });
+
+app.post('/records/:objectKey', async (req, res) => createCustomObjectRecord(req, res, req.params.objectKey));
 
 const port = Number(process.env.PORT || 3000);
 app.listen(port, () => console.log(`Listening on http://localhost:${port}`));

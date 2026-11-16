@@ -63,8 +63,7 @@ html
                                 div
                                     h3= label
                                     p= item && item.config ? item.config.description : ''
-                                if item && item.schema
-                                    a.button.button--small(href=`/records/${key}/new`) Add record
+                                a.button.button--small(href=`/records/${key}/new`) Add record
                             if item && item.schema && item.records.length
                                 .table-wrap
                                     table
@@ -80,8 +79,6 @@ html
                             else
                                 .empty-state
                                     p= item && item.schema ? 'No records yet.' : 'Set up the demo workspace to create this custom object.'
-                                    if item && item.schema
-                                        a.text-link(href=`/records/${key}/new`) Add the first record
 
             section.relationships
                 article.relationship-card
@@ -99,7 +96,10 @@ html
                                         strong= `${contact.properties.firstname || ''} ${contact.properties.lastname || ''}`.trim() || 'Contact'
                                         small= contact.properties.email || 'No email'
                     else
-                        p.muted Contacts from your HubSpot account will appear here.
+                        if standardObjectErrors && standardObjectErrors.contacts
+                            p.muted= `Could not load contacts: ${standardObjectErrors.contacts}`
+                        else
+                            p.muted Contacts from your HubSpot account will appear here.
                 article.relationship-card
                     .section-heading.section-heading--compact
                         div
@@ -115,7 +115,10 @@ html
                                         strong= company.properties.name || 'Company'
                                         small HubSpot company record
                     else
-                        p.muted Companies from your HubSpot account will appear here.
+                        if standardObjectErrors && standardObjectErrors.companies
+                            p.muted= `Could not load companies: ${standardObjectErrors.companies}`
+                        else
+                            p.muted Companies from your HubSpot account will appear here.
             footer.footer
                 span VMob Auto Group
                 span Demo data is fictional and intended for testing.
