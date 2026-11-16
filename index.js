@@ -326,6 +326,73 @@ app.post('/setup', async (req, res) => {
     }
 });
 
+app.get('/update-cobj', (req, res) => {
+    res.render('updates', {
+        title: 'Update Custom Object Form | Integrating With HubSpot I Practicum',
+        objectConfigs: OBJECTS,
+        error: '',
+        updated: req.query.updated || '',
+        values: {}
+    });
+});
+
+app.post('/update-cobj', async (req, res) => {
+    const title = 'Update Custom Object Form | Integrating With HubSpot I Practicum';
+    const selection = typeof req.body.property === 'string' ? req.body.property.split(':') : [];
+    const [objectKey, propertyName, ...extra] = selection;
+    const config = OBJECTS[objectKey];
+    const recordId = String(req.body.recordId || '').trim();
+    const value = String(req.body.value || '').trim();
+
+    if (!config || !Array.isArray(config.properties) || extra.length > 0 ||
+        !config.properties.some((property) => property.name === propertyName)) {
+        return res.status(400).render('updates', {
+            title,
+            objectConfigs: OBJECTS,
+            error: 'Choose a valid custom object property.',
+            updated: '',
+            values: { property: req.body.property, recordId, value }
+        });
+    }
+
+    if (!/^\d+$/.test(recordId) || !value) {
+        return res.status(400).render('updates', {
+            title,
+            objectConfigs: OBJECTS,
+            error: 'Enter a valid HubSpot record ID and a new property value.',
+            updated: '',
+            values: { property: req.body.property, recordId, value }
+        });
+    }
+
+    try {
+        requireAccessToken();
+        const schema = (await getSchemas()).find((item) => item.name === config.name);
+        if (!schema) {
+            return res.status(409).render('updates', {
+                title,
+                objectConfigs: OBJECTS,
+                error: `Set up the ${config.plural.toLowerCase()} custom object before updating records.`,
+                updated: '',
+                values: { property: req.body.property, recordId, value }
+            });
+        }
+
+        await api.patch(`/crm/v3/objects/${schema.objectTypeId}/${recordId}`, {
+            properties: { [propertyName]: value }
+        });
+        return res.redirect(`/update-cobj?updated=${encodeURIComponent(config.singular)}`);
+    } catch (error) {
+        return res.status(getErrorStatus(error)).render('updates', {
+            title,
+            objectConfigs: OBJECTS,
+            error: getErrorMessage(error),
+            updated: '',
+            values: { property: req.body.property, recordId, value }
+        });
+    }
+});
+
 app.get('/records/:objectKey/new', async (req, res) => {
     const config = OBJECTS[req.params.objectKey];
     if (!config) return res.status(404).send('Unknown custom object.');
